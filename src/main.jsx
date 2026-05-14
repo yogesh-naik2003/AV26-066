@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  Bot,
   Brain,
   CalendarDays,
   Camera,
@@ -30,6 +31,7 @@ import {
   Moon,
   PanelLeftClose,
   Search,
+  SendHorizontal,
   Settings,
   Share2,
   ShieldCheck,
@@ -75,6 +77,7 @@ const paths = {
   Viewer: '/scan-viewer',
   Analysis: '/analysis-result',
   Reports: '/reports',
+  Chatbot: '/chatbot',
   Settings: '/settings',
   Notifications: '/notifications'
 };
@@ -82,6 +85,30 @@ const paths = {
 const scans = [];
 const trend = [];
 const modelBreakdown = [];
+
+const chatbotConfig = {
+  Radiologist: {
+    title: 'Radiology Assistant',
+    intro: 'Ask about scan review, triage, report drafting, findings, modality workflow, heatmaps, and clinical handoff.',
+    placeholder: 'Ask about scan review or reports',
+    topics: ['scan', 'ct', 'mri', 'x-ray', 'xray', 'dicom', 'viewer', 'heatmap', 'segmentation', 'triage', 'finding', 'report', 'radiology', 'radiologist', 'modality', 'confidence', 'severity', 'handoff', 'upload'],
+    response: 'I can help with radiology workflow topics such as scan review, triage priority, modality selection, AI findings, confidence, heatmap interpretation, report drafting, and clinical handoff. Upload or select a scan first when you need case-specific details.'
+  },
+  Doctor: {
+    title: 'Clinical Assistant',
+    intro: 'Ask about patient history, reports, clinical notes, second opinions, treatment planning, and follow-up workflows.',
+    placeholder: 'Ask about reports or patient care',
+    topics: ['patient', 'history', 'report', 'finding', 'impression', 'recommendation', 'treatment', 'clinical', 'doctor', 'consult', 'second opinion', 'notes', 'prescription', 'follow-up', 'follow up', 'severity', 'care'],
+    response: 'I can explain doctor workflow topics such as report interpretation, patient history review, clinical notes, second-opinion requests, recommendations, follow-up planning, and care coordination. I cannot provide a patient-specific diagnosis without actual reviewed data.'
+  },
+  Patient: {
+    title: 'Patient Help Assistant',
+    intro: 'Ask about imaging reports, appointments, scan history, doctor messages, and patient-friendly report explanations.',
+    placeholder: 'Ask about reports or appointments',
+    topics: ['report', 'scan', 'history', 'appointment', 'doctor', 'message', 'patient', 'explanation', 'result', 'pdf', 'consultation', 'health', 'portal', 'imaging'],
+    response: 'I can explain patient portal topics such as where reports appear, what scan history means, how appointment and doctor-message actions fit the workflow, and how patient-friendly report explanations are shown after a clinician-approved result is available.'
+  }
+};
 
 function BrainModel() {
   return (
@@ -178,6 +205,7 @@ function App() {
             {page === 'Viewer' && <ScanViewer />}
             {page === 'Analysis' && <AnalysisResult />}
             {page === 'Reports' && <ReportsPage />}
+            {page === 'Chatbot' && <ChatbotPage role={role} />}
             {page === 'Settings' && <SettingsPage />}
             {page === 'Notifications' && <NotificationsPage />}
           </motion.div>
@@ -269,11 +297,11 @@ function Sidebar({ page, setPage, role, setRole, open, close }) {
   const roleNavItems = {
     Radiologist: [
       ['Radiologist', Home], ['Upload', Upload], ['Viewer', Layers3], 
-      ['Analysis', Brain], ['Reports', FileText], ['Notifications', Bell], ['Settings', Settings]
+      ['Analysis', Brain], ['Reports', FileText], ['Chatbot', Bot], ['Notifications', Bell], ['Settings', Settings]
     ],
     Doctor: [
       ['Doctor', Stethoscope], ['History', History], ['Viewer', Layers3], 
-      ['Analysis', Brain], ['Reports', FileText], ['Notifications', Bell], ['Settings', Settings]
+      ['Analysis', Brain], ['Reports', FileText], ['Chatbot', Bot], ['Notifications', Bell], ['Settings', Settings]
     ],
     Admin: [
       ['Admin', UserCog], ['Notifications', Bell], ['Settings', Settings]
@@ -282,7 +310,7 @@ function Sidebar({ page, setPage, role, setRole, open, close }) {
       ['Technician', Camera], ['Upload', Upload], ['Notifications', Bell], ['Settings', Settings]
     ],
     Patient: [
-      ['Patient', Users], ['History', History], ['Reports', FileText], ['Settings', Settings]
+      ['Patient', Users], ['History', History], ['Reports', FileText], ['Chatbot', Bot], ['Settings', Settings]
     ]
   };
 
@@ -662,6 +690,31 @@ function ReportsPage() {
   );
 }
 
+function ChatbotPage({ role }) {
+  const canUseChatbot = Boolean(chatbotConfig[role]);
+
+  return (
+    <div className="page-grid">
+      <section className="content-grid two">
+        {canUseChatbot ? (
+          <>
+            <ScopedChatbot role={role} />
+            <Panel title="Assistant Scope" icon={ShieldCheck}>
+              <p className="helper-copy">
+                The chatbot answers only topics related to the current workspace. It will redirect unrelated questions and should not replace clinician review.
+              </p>
+            </Panel>
+          </>
+        ) : (
+          <Panel title="Chatbot" icon={Bot}>
+            <EmptyState message="Chatbot is available for Radiologist, Doctor, and Patient workspaces." />
+          </Panel>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function SettingsPage() {
   return (
     <div className="page-grid">
@@ -737,6 +790,64 @@ function ScanQueue({ title = 'Scan Queue', compact }) {
           </div>
         ))}
       </div>
+    </Panel>
+  );
+}
+
+function ScopedChatbot({ role }) {
+  const config = chatbotConfig[role];
+  const [messages, setMessages] = useState([
+    { sender: 'bot', text: config.intro }
+  ]);
+  const [input, setInput] = useState('');
+
+  const quickPrompts = {
+    Radiologist: ['How do I review a scan?', 'What appears in reports?', 'How does triage work?'],
+    Doctor: ['How do I use reports?', 'How do second opinions work?', 'What can I add to notes?'],
+    Patient: ['Where are my reports?', 'How do appointments work?', 'What is scan history?']
+  };
+
+  const createReply = (question) => {
+    const normalized = question.toLowerCase();
+    const isRelated = config.topics.some((topic) => normalized.includes(topic));
+
+    if (!isRelated) {
+      return `I can only answer ${role.toLowerCase()} dashboard topics. Please ask about ${config.placeholder.toLowerCase()}.`;
+    }
+
+    return config.response;
+  };
+
+  const sendMessage = (text = input) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    setMessages((current) => [
+      ...current,
+      { sender: 'user', text: trimmed },
+      { sender: 'bot', text: createReply(trimmed) }
+    ]);
+    setInput('');
+  };
+
+  return (
+    <Panel title={config.title} icon={Bot} className="chatbot-panel">
+      <div className="chatbot-window" aria-live="polite">
+        {messages.map((message, index) => (
+          <div className={`chat-message ${message.sender}`} key={`${message.sender}-${index}`}>
+            {message.text}
+          </div>
+        ))}
+      </div>
+      <div className="chatbot-prompts">
+        {quickPrompts[role].map((prompt) => (
+          <button type="button" key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>
+        ))}
+      </div>
+      <form className="chatbot-input" onSubmit={(event) => { event.preventDefault(); sendMessage(); }}>
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder={config.placeholder} />
+        <button type="submit" aria-label="Send message"><SendHorizontal size={18} /></button>
+      </form>
     </Panel>
   );
 }
