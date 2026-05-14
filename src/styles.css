@@ -292,6 +292,47 @@ button {
   margin-top: 2px;
 }
 
+.auth-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.32);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  font-size: 0.88rem;
+}
+
+.dark .auth-error {
+  color: #fecaca;
+}
+
+.google-login-block {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.google-login-button {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+}
+
+.google-login-missing {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.dark .google-login-missing {
+  color: #cbd5e1;
+}
+
 .form-head h2, .topbar h2, .panel h2 {
   margin: 0;
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { Float, OrbitControls, Stars } from '@react-three/drei';
@@ -85,6 +85,9 @@ const paths = {
 const scans = [];
 const trend = [];
 const modelBreakdown = [];
+const normalLoginEmail = import.meta.env.VITE_PRELOGIN_EMAIL || 'demo@medivision.ai';
+const normalLoginPassword = import.meta.env.VITE_PRELOGIN_PASSWORD || 'demo123';
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const chatbotConfig = {
   Radiologist: {
@@ -223,6 +226,76 @@ function App() {
 
 function AuthModal({ mode, role, setRole, onAuth, setMode, onClose }) {
   const isRegister = mode === 'register';
+  const googleButtonRef = useRef(null);
+  const [email, setEmail] = useState(normalLoginEmail);
+  const [password, setPassword] = useState(normalLoginPassword);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isRegister || !googleClientId || !googleButtonRef.current) return;
+
+    const initializeGoogleLogin = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+
+      googleButtonRef.current.innerHTML = '';
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          if (!response.credential) {
+            setError('Google login did not return a valid credential.');
+            return;
+          }
+
+          setError('');
+          onAuth();
+        }
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        text: 'signin_with',
+        shape: 'rectangular',
+        width: 360
+      });
+    };
+
+    const existingScript = document.getElementById('google-identity-script');
+    if (existingScript) {
+      initializeGoogleLogin();
+      existingScript.addEventListener('load', initializeGoogleLogin, { once: true });
+      return () => existingScript.removeEventListener('load', initializeGoogleLogin);
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-identity-script';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', initializeGoogleLogin, { once: true });
+    document.head.appendChild(script);
+
+    return () => script.removeEventListener('load', initializeGoogleLogin);
+  }, [isRegister, onAuth]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    if (isRegister) {
+      setError('');
+      onAuth();
+      return;
+    }
+
+    if (email.trim() === normalLoginEmail && password === normalLoginPassword) {
+      setError('');
+      onAuth();
+      return;
+    }
+
+    setError('Invalid email or password. Use the configured pre-login credentials or sign in with Google.');
+  };
+
   return (
     <div className="auth-modal-overlay" onClick={(e) => { if(e.target.className === 'auth-modal-overlay') onClose(); }}>
       <motion.form 
@@ -231,7 +304,7 @@ function AuthModal({ mode, role, setRole, onAuth, setMode, onClose }) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }} 
         animate={{ opacity: 1, scale: 1, y: 0 }} 
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        onSubmit={(e) => { e.preventDefault(); onAuth(); }}
+        onSubmit={handleSubmit}
       >
         <button type="button" className="auth-close-btn" onClick={onClose}><X size={20}/></button>
         <div className="auth-card-top">
@@ -259,8 +332,8 @@ function AuthModal({ mode, role, setRole, onAuth, setMode, onClose }) {
             </label>
           </>
         )}
-        <Field label="Email" type="email" placeholder="Enter email" defaultValue="demo@medivision.ai" />
-        <Field label="Password" type="password" placeholder="password" defaultValue="demo123" />
+        <Field label="Email" type="email" placeholder="Enter email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <Field label="Password" type="password" placeholder="password" value={password} onChange={(event) => setPassword(event.target.value)} />
         {isRegister && (
           <>
             <Field label="Confirm Password" type="password" placeholder="password" />
@@ -273,11 +346,21 @@ function AuthModal({ mode, role, setRole, onAuth, setMode, onClose }) {
             {roles.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
+        {error && <div className="auth-error">{error}</div>}
         <button className="primary-btn" style={{marginTop: 8}} type="submit"><LogIn size={18} /> {isRegister ? 'Create Account' : 'Login'}</button>
+        {!isRegister && (
+          <div className="google-login-block">
+            {googleClientId ? (
+              <div ref={googleButtonRef} className="google-login-button" />
+            ) : (
+              <div className="google-login-missing">Add VITE_GOOGLE_CLIENT_ID to enable Google login.</div>
+            )}
+          </div>
+        )}
         <div className="auth-actions">
           <button type="button" onClick={() => setMode(isRegister ? 'login' : 'register')}>{isRegister ? 'Already registered?' : 'Register'}</button>
           {!isRegister && <button type="button">Forgot Password</button>}
-          <button type="button" onClick={onAuth}>Continue</button>
+          {!isRegister && <button type="button" onClick={() => { setEmail(normalLoginEmail); setPassword(normalLoginPassword); setError(''); }}>Use Pre-login Credentials</button>}
         </div>
       </motion.form>
     </div>
