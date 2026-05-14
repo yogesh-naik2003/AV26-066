@@ -1615,3 +1615,17 @@ textarea {
 .auth-close-btn:hover {
   background: rgba(148, 163, 184, 0.3);
 }
+
+.empty-state {
+  width: 100%;
+  padding: 18px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  color: rgba(71, 85, 105, 0.82);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.dark .empty-state {
+  color: rgba(236, 247, 255, 0.72);
+}
